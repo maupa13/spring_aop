@@ -1,0 +1,15 @@
+# Main configuration
+
+# Spring settings
+spring:
+  application:
+    name: logging_application
+  profiles:
+    active: ${activatedProperties}
+
+# JWT settings
+application:
+  security:
+    jwt:
+      secret-key: "a89d288a60ea60694eb71e667502c653c21a4202e9713ef2076be8c1afb60446"
+      token-duration: 86400000 # a day

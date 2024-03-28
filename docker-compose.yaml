@@ -1,0 +1,44 @@
+# The docker-compose.yaml file defines a Docker Compose configuration for setting up
+# Postgres database and Spring Boot service, network for the Spring_AOP application.
+
+version: '3.8'
+
+services:
+
+  # Logging application
+  logging-application:
+    restart: always
+    container_name: logging-application
+    build:
+      context: ./logging-application
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_HOST: database
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: db
+    ports:
+      - "8082:8082"
+    depends_on:
+      - db
+    networks:
+      - proxy.network
+
+  # Database
+  db:
+    container_name: db
+    image: 'postgres:13.1-alpine'
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    networks:
+      - proxy.network
+
+# Defines a custom network for communication between the services.
+networks:
+  proxy.network:
+    driver: bridge
