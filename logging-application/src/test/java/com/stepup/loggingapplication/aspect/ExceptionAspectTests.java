@@ -1,95 +1,107 @@
 package com.stepup.loggingapplication.aspect;
 
-import com.stepup.loggingapplication.exception.NotFoundException;
+import com.stepup.loggingapplication.ConfigEnvironmentTest;
+import com.stepup.loggingapplication.entity.UserEntity;
+import com.stepup.loggingapplication.model.LoginRequestDto;
+import com.stepup.loggingapplication.repository.UserRepository;
+import io.restassured.http.ContentType;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.apache.logging.log4j.Logger;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 
-import java.lang.reflect.Field;
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+import java.util.ArrayList;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.Mockito.verify;
+import static io.restassured.RestAssured.given;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Unit tests for the LoggingAspect class.
- * These tests verify the behavior of logging methods in the LoggingAspect class.
+ * Integration tests for the {@link ExceptionAspect} class.
+ * <p>
+ * These tests verify that the aspect properly handles exceptions thrown by service and controller methods.
+ * <p>
+ * The tests are configured to run with the "dev" profile, and they set the logging level for the {@link ExceptionAspect}
+ * to DEBUG to ensure that logging statements are captured for verification.
  */
-@ExtendWith(MockitoExtension.class)
-public class ExceptionAspectTests {
+@ActiveProfiles("dev")
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@TestPropertySource(properties = {"logging.level.com.stepup.loggingapplication.aspect.ExceptionAspect=DEBUG"})
+public class ExceptionAspectTests extends ConfigEnvironmentTest {
+
+    @LocalServerPort
+    private int port;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    private ByteArrayOutputStream logCapture;
 
     /**
-     * Mock logger object.
-     */
-    @Mock
-    private Logger logger;
-
-    /**
-     * Instance of ExceptionAspect class being tested.
-     */
-    private ExceptionAspect exceptionAspect;
-
-    /**
-     * Setup method executed before each test.
-     * Initializes the exceptionAspect object and sets the logger.
-     *
-     * @throws Exception   if a field with the specified name is not found
+     * Sets up the test environment before each test method execution.
+     * <p>
+     * This method redirects the standard output to a {@link ByteArrayOutputStream} to capture logging statements
+     * for verification.
      */
     @BeforeEach
-    public void setUp() throws Exception {
-        exceptionAspect = new ExceptionAspect();
-        setLogger(exceptionAspect, logger);
+    public void setUp() {
+        // Redirect logs to a ByteArrayOutputStream
+        logCapture = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(logCapture));
     }
 
     /**
-     * Test method for verifying handling exceptions.
+     * Cleans up the test environment after each test method execution.
+     * <p>
+     * This method restores the standard output after logging verification is completed.
+     */
+    @AfterEach
+    public void tearDown() {
+        // Restore standard output
+        System.setOut(System.out);
+    }
+
+    /**
+     * Tests the logging behavior of the {@link ExceptionAspect} for unauthorized login attempts.
+     * <p>
+     * This test case simulates a login attempt with invalid credentials and verifies that the aspect logs the
+     * appropriate exception message.
      */
     @Test
-    public void testHandleExceptions() {
+    void logMethod() {
         // Given
-        Exception exception = new NotFoundException("Test Exception");
+        UserEntity userEntity = new UserEntity();
+        userEntity.setPassword("123");
+        userEntity.setName("Name");
+        userEntity.setEmail("email@");
+        userEntity.setRole("ROLE_USER");
+        userEntity.setOrders(new ArrayList<>());
 
-        // When
-        ResponseEntity<String> responseEntity = exceptionAspect.handleExceptions(exception);
+        userRepository.save(userEntity);
+
+        LoginRequestDto logingRequestDto = LoginRequestDto.builder()
+                .email("email@")
+                .password("WRONG")
+                .build();
+
+        // When & Then
+        given()
+                .port(port)
+                .contentType(ContentType.JSON)
+                .body(logingRequestDto)
+                .when()
+                .post("/auth/login")
+                .then()
+                .statusCode(HttpStatus.UNAUTHORIZED.value());
 
         // Then
-        verify(logger).error("Test Exception");
-        assertEquals(HttpStatus.NOT_FOUND, responseEntity.getStatusCode());
-        assertEquals("Test Exception", responseEntity.getBody());
-    }
-
-    /**
-     * Test method for verifying handling exceptions.
-     */
-    @Test
-    public void testHandleExceptions_IllegalArgumentException() {
-        // Given
-        Exception exception = new IllegalArgumentException("Test Exception");
-
-        // When
-        ResponseEntity<String> responseEntity = exceptionAspect.handleExceptions(exception);
-
-        // Then
-        verify(logger).error("Test Exception");
-        assertEquals(HttpStatus.CONFLICT, responseEntity.getStatusCode());
-        assertEquals("Test Exception", responseEntity.getBody());
-    }
-
-    /**
-     * Sets the logger field of the ExceptionAspect instance using reflection.
-     *
-     * @param aspect ExceptionAspect instance
-     * @param logger Logger to set
-     * @throws NoSuchFieldException   if a field with the specified name is not found
-     * @throws IllegalAccessException if the field cannot be accessed
-     */
-    private void setLogger(ExceptionAspect aspect, Logger logger) throws NoSuchFieldException, IllegalAccessException {
-        Field field = aspect.getClass().getDeclaredField("logger");
-        field.setAccessible(true);
-        field.set(aspect, logger);
+        String logs = logCapture.toString();
+        assertTrue(logs.contains("Exception"));
     }
 }

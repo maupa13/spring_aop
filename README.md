@@ -2,7 +2,7 @@
 
 The Spring_AOP application is a system designed for Spring Security 
 with JWT token and AOP using Log4j2. It consists of a Postgres database, 
-Spring Boot 3.1.4 services with unit tests for aspects,
+Spring Boot 3.1.4 services with environment tests for aspects,
 and configurations for Docker-based development environments. 
 
 The application was scheduled to automatically register two users 
@@ -36,3 +36,9 @@ Example of get request with token in Postman:
 ##  Swagger UI
 To run Swagger UI, go to following path:
 - `logging-application`: http://localhost:8082/swagger-ui/index.html
+
+## Tests
+The project includes tests for aspects and services, ensuring correctness in functionality.
+These tests can be found in the tests directory and run independently.
+    ```bash
+    mvn test
