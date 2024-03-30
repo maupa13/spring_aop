@@ -1,102 +1,93 @@
 package com.stepup.loggingapplication.aspect;
 
-import org.aspectj.lang.JoinPoint;
-import org.aspectj.lang.reflect.MethodSignature;
+import com.stepup.loggingapplication.ConfigEnvironmentTest;
+import com.stepup.loggingapplication.model.RegistrationRequestDto;
+import io.restassured.http.ContentType;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.apache.logging.log4j.Logger;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.http.HttpStatus;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 
-import java.lang.reflect.Field;
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
 
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static io.restassured.RestAssured.given;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Unit tests for the LoggingAspect class.
- * These tests verify the behavior of logging methods in the LoggingAspect class.
+ * Integration tests for the {@link LoggingAspect} class.
+ * <p>
+ * These tests verify the logging behavior of the {@link LoggingAspect} by intercepting method calls and capturing
+ * log statements. The tests are configured to run with the "dev" profile, and they set the logging level for the
+ * {@link LoggingAspect} to DEBUG to ensure that logging statements are captured for verification.
  */
-@ExtendWith(MockitoExtension.class)
-public class LoggingAspectTests {
+@ActiveProfiles("dev")
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@TestPropertySource(properties = {"logging.level.com.stepup.loggingapplication.aspect.LoggingAspect=DEBUG"})
+public class LoggingAspectTests extends ConfigEnvironmentTest {
+
+    @LocalServerPort
+    private int port;
+
+    private ByteArrayOutputStream logCapture;
 
     /**
-     * Mock logger object.
-     */
-    @Mock
-    private Logger logger;
-
-    /**
-     * Mock joinPoint object.
-     */
-    @Mock
-    private JoinPoint joinPoint;
-
-    /**
-     * Instance of LoggingAspect class being tested.
-     */
-    private LoggingAspect loggingAspect;
-
-    /**
-     * Setup method executed before each test.
-     * Initializes the loggingAspect object and sets the logger.
-     *
-     * @throws NoSuchFieldException   if a field with the specified name is not found
-     * @throws IllegalAccessException if the field cannot be accessed
+     * Sets up the test environment before each test method execution.
+     * <p>
+     * This method redirects the standard output to a {@link ByteArrayOutputStream} to capture logging statements
+     * for verification.
      */
     @BeforeEach
-    public void setup() throws NoSuchFieldException, IllegalAccessException {
-        loggingAspect = new LoggingAspect();
-        setLogger(loggingAspect, logger);
+    public void setUp() {
+        // Redirect logs to a ByteArrayOutputStream
+        logCapture = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(logCapture));
     }
 
     /**
-     * Test method for verifying the log entry.
+     * Cleans up the test environment after each test method execution.
+     * <p>
+     * This method restores the standard output after logging verification is completed.
+     */
+    @AfterEach
+    public void tearDown() {
+        // Restore standard output
+        System.setOut(System.out);
+    }
+
+    /**
+     * Tests the logging behavior of the {@link LoggingAspect} for method entry and exit.
+     * <p>
+     * This test case invokes a method that is intercepted by the {@link LoggingAspect} and verifies that the aspect
+     * logs the appropriate method entry and exit messages.
      */
     @Test
-    public void testLogMethodEntry() {
-        // Configure the mock JoinPoint
-        MethodSignature methodSignature = mock(MethodSignature.class);
-        when(methodSignature.toShortString()).thenReturn("methodName"); // Mock the behavior of toShortString()
-        when(joinPoint.getSignature()).thenReturn(methodSignature);
+    void logMethod() {
+        // Given
+        RegistrationRequestDto user = RegistrationRequestDto.builder()
+                .email("Email 1")
+                .name("Name 1")
+                .password("Password 1")
+                .role("ROLE_USER")
+                .build();
 
-        // When
-        loggingAspect.logMethodEntry(joinPoint);
-
-        // Then
-        verify(logger).info("Entering method: {}", "methodName");
-    }
-
-    /**
-     * Test method for verifying the log exit.
-     */
-    @Test
-    public void testLogMethodExit() {
-        // Configure the mock JoinPoint
-        MethodSignature methodSignature = mock(MethodSignature.class);
-        when(methodSignature.toShortString()).thenReturn("methodName"); // Mock the behavior of toShortString()
-        when(joinPoint.getSignature()).thenReturn(methodSignature);
-
-        // When
-        loggingAspect.logMethodExit(joinPoint);
+        // When & Then
+        given()
+                .port(port)
+                .contentType(ContentType.JSON)
+                .body(user)
+                .when()
+                .post("/auth/register")
+                .then()
+                .statusCode(HttpStatus.OK.value());
 
         // Then
-        verify(logger).info("Exiting method: {}", "methodName");
-    }
-
-    /**
-     * Sets the logger field of the LoggingAspect instance using reflection.
-     *
-     * @param loggingAspect LoggingAspect instance
-     * @param logger        Logger to set
-     * @throws NoSuchFieldException   if a field with the specified name is not found
-     * @throws IllegalAccessException if the field cannot be accessed
-     */
-    private void setLogger(LoggingAspect loggingAspect, Logger logger) throws NoSuchFieldException, IllegalAccessException {
-        Field field = LoggingAspect.class.getDeclaredField("logger");
-        field.setAccessible(true);
-        field.set(loggingAspect, logger);
+        String logs = logCapture.toString();
+        assertTrue(logs.contains("Entering method:"));
+        assertTrue(logs.contains("Exiting method:"));
     }
 }
